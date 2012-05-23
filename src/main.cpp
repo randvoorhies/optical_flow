@@ -24,6 +24,9 @@ class OpticalFlow
     image_transport::Subscriber image_sub_;
     cv::Mat key_image_;
     std::vector<cv::Point2f> key_corners_;
+
+    int num_keypoints_param_;
+    double matchscore_thresh_param_;
 };
 
 // ######################################################################
@@ -32,7 +35,9 @@ OpticalFlow::OpticalFlow() :
 {
   // Subscriptions/Advertisements
   image_sub_ = it_.subscribe("image", 1, &OpticalFlow::imageCallback, this);
-  cv::namedWindow("input");
+
+  nh_.param("num_keypoints", num_keypoints_param_, 50);
+  nh_.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
 }
 
 // ######################################################################
@@ -111,7 +116,7 @@ void trackFeatures(cv::Mat key_image, cv::Mat curr_image, std::vector<cv::Point2
   while(status_it != status.end())
   {
     if(*status_it &&
-      sqrt(pow(new_corners_it->y - back_corners_it->y, 2) + pow(new_corners_it->y - back_corners_it->y, 2)) < 30)
+      sqrt(pow(new_corners_it->y - back_corners_it->y, 2) + pow(new_corners_it->y - back_corners_it->y, 2)) < 10)
     {
       filt_old_corners.push_back(*corners_it);
       filt_corners.push_back(*new_corners_it);
@@ -136,46 +141,53 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     cv_ptr = cv_bridge::toCvShare(input_img_ptr, sensor_msgs::image_encodings::MONO8);
 
     cv::Mat input_image = cv_ptr->image;
+    cv::pyrDown(input_image, input_image);
 
-    // First frame is the keyframe for now
-    if(key_corners_.size() <= 10)
+    // Grab a new keyframe whenever we have lost more than half of our tracks
+    if(key_corners_.size() < size_t(num_keypoints_param_ / 2))
     {
-      cv::goodFeaturesToTrack(input_image, key_corners_, 50, 0.01, 30);
+      cv::goodFeaturesToTrack(input_image, key_corners_, num_keypoints_param_, 0.01, 30);
       key_image_ = input_image.clone();
     }
 
-    boost::timer timer;
-
+    // Track the features from the keyframe to the current frame
     std::vector<cv::Point2f> new_corners;
     trackFeatures(key_image_, input_image, key_corners_, new_corners);
 
-    cv::Mat homography = cv::Mat_<float>::eye(3,3);
-    if(new_corners.size() >= 15)
+    cv::Mat warped_key_image;
+    if(new_corners.size() < size_t(num_keypoints_param_/2))
     {
-      homography = cv::findHomography(key_corners_, new_corners, CV_RANSAC);
+      // If we didn't track enough points, then kill the keyframe
+      key_corners_.clear();
+    }
+    else
+    {
+      // Find the homography between the last frame and the current frame
+      cv::Mat homography = cv::findHomography(key_corners_, new_corners, CV_RANSAC);
+
+      // Warp the keyframe image to the new image, and find the squared difference
+      cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
+      cv::Mat matchScore;
+      cv::matchTemplate(input_image, warped_key_image, matchScore, CV_TM_SQDIFF);
+      ROS_INFO("Match Score: %f", matchScore.at<float>(0,0));
+
+      // If the difference between the warped template and the new frame is too large,
+      // then kill the keyframe
+      if(matchScore.at<float>(0,0) > matchscore_thresh_param_)
+        key_corners_.clear();
     }
 
-
-    cv::Mat warped_key_image;
-    cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
-
-    cv::Mat matchScore;
-    cv::matchTemplate(input_image, warped_key_image, matchScore, CV_TM_SQDIFF);
-    ROS_INFO("Match Score: %f", matchScore.at<float>(0,0));
-
-    if(matchScore.at<float>(0,0) > 10e9)
-      key_corners_.clear();
-
-    double time = timer.elapsed();
-    ROS_INFO("Time = %fhz", 1.0/time);
-
-    drawFeatures(input_image, key_corners_, new_corners);
+    // Draw the results
+    if(key_corners_.size())
+      drawFeatures(input_image, key_corners_, new_corners);
 
     if(key_corners_.size())
       cv::imshow("homography", warped_key_image);
+
     cv::imshow("tracker (press key for keyframe)", input_image);
-    if(cv::waitKey(2) != -1)
-      key_corners_.clear();
+
+    if(cv::waitKey(2) != -1) key_corners_.clear();
+
   }
   catch(cv_bridge::Exception & e)
   {
