@@ -155,15 +155,24 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
       homography = cv::findHomography(key_corners_, new_corners, CV_RANSAC);
     }
 
+
+    cv::Mat warped_key_image;
+    cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
+
+    cv::Mat matchScore;
+    cv::matchTemplate(input_image, warped_key_image, matchScore, CV_TM_SQDIFF);
+    ROS_INFO("Match Score: %f", matchScore.at<float>(0,0));
+
+    if(matchScore.at<float>(0,0) > 10e9)
+      key_corners_.clear();
+
     double time = timer.elapsed();
     ROS_INFO("Time = %fhz", 1.0/time);
 
     drawFeatures(input_image, key_corners_, new_corners);
 
-    cv::Mat warped_key_image;
-    cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
-
-    cv::imshow("homography", warped_key_image);
+    if(key_corners_.size())
+      cv::imshow("homography", warped_key_image);
     cv::imshow("tracker (press key for keyframe)", input_image);
     if(cv::waitKey(2) != -1)
       key_corners_.clear();
