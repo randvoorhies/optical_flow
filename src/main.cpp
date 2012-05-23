@@ -55,6 +55,31 @@ void drawFeatures(cv::Mat & image, std::vector<cv::Point2f> const & old_corners,
   }
 }
 
+void filterPoints(std::vector<cv::Point2f> & p1, std::vector<cv::Point2f> & p2, std::vector<unsigned char> const & status)
+{
+  std::vector<cv::Point2f> p1_filt;     p1_filt.reserve(p1.size());
+  std::vector<cv::Point2f> p2_filt; p2_filt.reserve(p1.size());
+
+  std::vector<cv::Point2f>::iterator p1_it = p1.begin();
+  std::vector<cv::Point2f>::iterator p2_it = p2.begin();
+  std::vector<unsigned char>::const_iterator status_it = status.begin();
+
+  // Filter out bad tracks
+  while(status_it != status.end())
+  {
+    if(*status_it > 0)
+    {
+      p1_filt.push_back(*p1_it);
+      p2_filt.push_back(*p2_it);
+    }
+    ++p1_it;
+    ++p2_it;
+    ++status_it;
+  }
+  p1 = p1_filt;
+  p2 = p2_filt;
+}
+
 // ######################################################################
 void trackFeatures(cv::Mat key_image, cv::Mat curr_image, std::vector<cv::Point2f> & corners, std::vector<cv::Point2f> & new_corners)
 {
@@ -65,28 +90,7 @@ void trackFeatures(cv::Mat key_image, cv::Mat curr_image, std::vector<cv::Point2
   std::vector<unsigned char> status(corners.size());
   std::vector<float> error(corners.size());
   calcOpticalFlowPyrLK(key_image, curr_image, corners, new_corners, status, error);
-
-  //std::vector<cv::Point2f> corners_filt;     corners_filt.reserve(corners.size());
-  //std::vector<cv::Point2f> new_corners_filt; new_corners_filt.reserve(corners.size());
-
-  //std::vector<cv::Point2f>::iterator corners_it = corners.begin();
-  //std::vector<cv::Point2f>::iterator new_corners_it = new_corners.begin();
-  //std::vector<unsigned char>::iterator status_it = status.begin();
-
-  //// Filter out bad tracks
-  //while(status_it != status.end())
-  //{
-  //  if(*status_it > 0)
-  //  {
-  //    corners_filt.push_back(*corners_it);
-  //    new_corners_filt.push_back(*new_corners_it);
-  //  }
-  //  ++corners_it;
-  //  ++new_corners_it;
-  //  ++status_it;
-  //}
-  //corners     = corners_filt;
-  //new_corners = new_corners_filt;
+  filterPoints(corners, new_corners, status);
 
 }
 
@@ -104,7 +108,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     if(key_corners_.size() == 0)
     {
       cv::goodFeaturesToTrack(input_image, key_corners_, 100, 0.01, 15);
-      key_image_ = input_image;
+      key_image_ = input_image.clone();
     }
 
     std::vector<cv::Point2f> new_corners;
@@ -112,6 +116,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
     drawFeatures(input_image, key_corners_, new_corners);
 
+    cv::imshow("keyframe", key_image_);
     cv::imshow("input", input_image);
     cv::waitKey(2);
   }
