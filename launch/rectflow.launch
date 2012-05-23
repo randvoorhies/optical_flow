@@ -5,7 +5,7 @@
 	  <param name="use_ros_time" value="true" type="bool" />
   </node>
   
-  <!--############################## rectify ##############################-->
+  <!--############################## RECTIFY ##############################-->
   <node pkg="jplvision" name="image_rectifier" type="image_rectifier_node" output="screen">
     <param name="cam_model" value="$(find downward_plane_tracker)/calibration/fireflyMV11221841.cahvor" type="str" />
     <param name="debug" value="0" type="int"/>
@@ -15,6 +15,7 @@
     <remap from="rectimage" to="/camera/image_rect" />
   </node>
 
+  <!--############################## OPTICAL FLOW ##############################-->
   <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen">
     <remap from="image" to="/camera/image_rect"/>
   </node>
