@@ -4,16 +4,23 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/Range.h>
 #include <sensor_msgs/image_encodings.h>
+#include <tf/tf.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <iostream>
 #include <boost/timer.hpp>
+#include <Eigen/Geometry>
 
 // ######################################################################
 class OpticalFlow
 {
+  typedef double EigenPrecision;
+  typedef Eigen::Quaternion<EigenPrecision> Quaternion;
+
   public:
     OpticalFlow();
     ~OpticalFlow();
@@ -25,12 +32,19 @@ class OpticalFlow
 
   private:
     ros::NodeHandle nh_;
+
     image_transport::ImageTransport it_;
     image_transport::Subscriber image_sub_;
     ros::Subscriber imu_sub_;
     ros::Subscriber sonar_sub_;
+    ros::Publisher cam_pose_pub_;
+
     cv::Mat key_image_;
     std::vector<cv::Point2f> key_corners_;
+
+    cv::Mat global_transform_;
+
+    Quaternion imu_quat_;
 
     int num_keypoints_param_;
     double matchscore_thresh_param_;
@@ -41,23 +55,31 @@ OpticalFlow::OpticalFlow() :
   it_(nh_)
 {
   // Subscriptions/Advertisements
-  image_sub_ = it_.subscribe("image", 1, &OpticalFlow::imageCallback, this);
-  imu_sub_   = nh_.subscribe("imu",   1, &OpticalFlow::imuCallback,    this);
-  sonar_sub_ = nh_.subscribe("sonar", 1, &OpticalFlow::sonarCallback, this);
-
+  image_sub_    = it_.subscribe("image", 1, &OpticalFlow::imageCallback, this);
+  imu_sub_      = nh_.subscribe("imu",   1, &OpticalFlow::imuCallback,    this);
+  sonar_sub_    = nh_.subscribe("sonar", 1, &OpticalFlow::sonarCallback, this);
+  cam_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("cam_pose", 10);
+  
   // Parameters
   nh_.param("num_keypoints", num_keypoints_param_, 50);
   nh_.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
+
+  global_transform_ = cv::Mat_<double>::eye(3,3);
 }
 
 // ######################################################################
 OpticalFlow::~OpticalFlow() 
-{ 
-}
+{ }
 
 // ######################################################################
 void OpticalFlow::imuCallback(const sensor_msgs::Imu::ConstPtr &msg)
 {
+  imu_quat_ = Quaternion(
+      msg->orientation.w, 
+      msg->orientation.x, 
+      msg->orientation.y, 
+      msg->orientation.z); 
+
 }
 
 // ######################################################################
@@ -87,7 +109,7 @@ void drawFeatures(cv::Mat & image,
 }
 
 // ######################################################################
-//! Filter out all points from p1 and p2 who's corresponding status byte == 0
+//! Filter out all points from p1 and p2 with corresponding status byte == 0
 void filterPoints(std::vector<cv::Point2f> & p1, std::vector<cv::Point2f> & p2,
     std::vector<unsigned char> const & status)
 {
@@ -217,7 +239,27 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
       // then kill the keyframe
       if(matchScore.at<float>(0,0) > matchscore_thresh_param_)
         key_corners_.clear();
+
+      if(key_corners_.size())
+      {
+        std::cout << __LINE__ << std::endl;
+        global_transform_ = homography * global_transform_;
+
+
+        // Find the current position of the camera
+        std::cout << __LINE__ << std::endl;
+        cv::Mat position = global_transform_ * (cv::Mat_<double>(3, 1) << 0, 0, 1);
+        //position.at<double>(0,0) -= input_image.cols/2;
+        //position.at<double>(0,1) -= input_image.rows/2;
+
+        std::cout << __LINE__ << std::endl;
+        ROS_INFO("Position: %0.4f %0.4f", position.at<double>(0,0), position.at<double>(0, 1));
+      }
+      
+
     }
+
+
 
     // Draw the warped keyframe
     if(key_corners_.size())
