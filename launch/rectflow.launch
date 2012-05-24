@@ -4,10 +4,21 @@
   <arg name="prefix_gdb"      value="xterm -e gdb -ex run --args"/>
   <arg name="prefix_callgrind" value="xterm -hold -e valgrind --tool=callgrind"/>
 
-  <!--############################## CAMERA ##############################-->
+  <!--############################## CAMERA ##############################
   <node name="camera1394" pkg="camera1394" type="camera1394_node" respawn="false" output="screen">
 	  <param name="use_ros_time" value="true" type="bool" />
-  </node>
+  </node>-->
+
+  <!--#################### IMU ####################
+  <node pkg="microstrain_3dmgx1_imu" type="imu_node" name="imu" output="screen">
+    <param name="port"                   value="/dev/ttyUSB3" type="string"/>
+    <param name="autostart"              value="true"         type="bool"/>
+    <param name="frameid"                value="imu"          type="string"/>
+    <param name="autocalibrate"          value="false"        type="bool"/>
+    <param name="angular_velocity_stdev" value="0.00017"      type="double"/>
+
+    <remap from="data" to="/imu/data"/>
+  </node>-->
 
   <!--############################## RECTIFIER ##############################-->
   <node pkg="jplvision" name="image_rectifier" type="image_rectifier_node" output="screen">
@@ -19,28 +30,19 @@
     <remap from="rectimage" to="/camera/image_rect" />
   </node>
 
+
   <!--#################### SONAR SIMULATOR ####################-->
   <node pkg="sonar" type="sonar_1m_simulator_node" name="sonar" output="screen">
       <remap from="sonar_range" to="/sonar_range"/>
   </node>
 
-  <!--#################### IMU ####################-->
-  <node pkg="microstrain_3dmgx1_imu" type="imu_node" name="imu" output="screen">
-    <param name="port"                   value="/dev/ttyUSB3" type="string"/>
-    <param name="autostart"              value="true"         type="bool"/>
-    <param name="frameid"                value="imu"          type="string"/>
-    <param name="autocalibrate"          value="false"        type="bool"/>
-    <param name="angular_velocity_stdev" value="0.00017"      type="double"/>
-
-    <remap from="data" to="/imu/data"/>
-  </node>
-
   <!--############################## OPTICAL FLOW ##############################-->
   <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_xterm)">
-    <param name="downsample_times"  value="1"    type="int"/>
-    <param name="matchscore_thresh" value="10e6" type="double"/>
-    <param name="num_keypoints"     value="50"   type="int"/>
-    <param name="backwards_filter"  value="true" type="bool"/>
+    <param name="downsample_times"    value="2"    type="int"/>
+    <param name="matchscore_thresh"   value="10e11" type="double"/>
+    <param name="num_keypoints"       value="25"   type="int"/>
+    <param name="backwards_filter"    value="true" type="bool"/>
+    <param name="backwards_threshold" value="10"   type="double"/>
 
     <remap from="image" to="/camera/image_rect"/>
   </node>
