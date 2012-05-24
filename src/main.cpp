@@ -191,7 +191,6 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
       cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
       cv::Mat matchScore;
       cv::matchTemplate(input_image, warped_key_image, matchScore, CV_TM_SQDIFF);
-      ROS_INFO("Match Score: %f", matchScore.at<float>(0,0));
 
       // If the difference between the warped template and the new frame is too large,
       // then kill the keyframe
@@ -206,7 +205,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     // Draw the features on the input image
     if(key_corners_.size())
       drawFeatures(input_image, key_corners_, new_corners);
-    cv::imshow("tracker (press key for keyframe)", input_image);
+    cv::imshow("tracker (press key to force keyframe)", input_image);
 
     if(cv::waitKey(2) != -1) key_corners_.clear();
 

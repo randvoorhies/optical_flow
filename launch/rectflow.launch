@@ -4,8 +4,8 @@
   <node name="camera1394" pkg="camera1394" type="camera1394_node" respawn="false" output="screen">
 	  <param name="use_ros_time" value="true" type="bool" />
   </node>
-  
-  <!--############################## RECTIFY ##############################-->
+
+  <!--############################## RECTIFIER ##############################-->
   <node pkg="jplvision" name="image_rectifier" type="image_rectifier_node" output="screen">
     <param name="cam_model" value="$(find downward_plane_tracker)/calibration/fireflyMV11221841.cahvor" type="str" />
     <param name="debug" value="0" type="int"/>
@@ -13,6 +13,22 @@
 
     <remap from="image" to="/camera/image_raw" />
     <remap from="rectimage" to="/camera/image_rect" />
+  </node>
+
+  <!--#################### SONAR SIMULATOR ####################-->
+  <node pkg="sonar" type="sonar_1m_simulator_node" name="sonar" output="screen">
+      <remap from="sonar_range" to="/sonar_range"/>
+  </node>
+
+  <!--#################### IMU ####################-->
+  <node pkg="microstrain_3dmgx1_imu" type="imu_node" name="imu" output="screen">
+    <param name="port"                   value="/dev/ttyUSB3" type="string"/>
+    <param name="autostart"              value="true"         type="bool"/>
+    <param name="frameid"                value="imu"          type="string"/>
+    <param name="autocalibrate"          value="false"        type="bool"/>
+    <param name="angular_velocity_stdev" value="0.00017"      type="double"/>
+
+    <remap from="data" to="/imu/data"/>
   </node>
 
   <!--############################## OPTICAL FLOW ##############################-->
