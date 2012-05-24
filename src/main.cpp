@@ -15,6 +15,8 @@
 #include <boost/timer.hpp>
 #include <Eigen/Geometry>
 
+#include "optical_flow/KeyframeTracker.h"
+
 // ######################################################################
 class OpticalFlow
 {
