@@ -50,6 +50,7 @@ class OpticalFlow
     int num_keypoints_param_;
     double matchscore_thresh_param_;
     bool backwards_filter_param_;
+    int downsample_times_param_;
 
     double avg_time_;
 };
@@ -64,11 +65,17 @@ OpticalFlow::OpticalFlow() :
   imu_sub_      = nh_.subscribe("imu",   1, &OpticalFlow::imuCallback,    this);
   sonar_sub_    = nh_.subscribe("sonar", 1, &OpticalFlow::sonarCallback, this);
   cam_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("cam_pose", 10);
+
   
   // Parameters
-  nh_.param("num_keypoints",     num_keypoints_param_, 50);
-  nh_.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
-  nh_.param("backwards_filter",  backwards_filter_param_, true);
+  ros::NodeHandle private_nh("~");
+  private_nh.param("num_keypoints",     num_keypoints_param_, 50);
+  private_nh.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
+  private_nh.param("backwards_filter",  backwards_filter_param_, true);
+  private_nh.param("downsample_times",  downsample_times_param_, 2);
+
+  ROS_WARN("Downsample Times>>>> %d", downsample_times_param_);
+  ROS_WARN("numkeypoints %d", num_keypoints_param_);
 
   global_transform_ = cv::Mat_<double>::eye(3,3);
 }
@@ -218,8 +225,8 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     ros::Time start_time = ros::Time::now();
 
     // Scale the incoming image down
-    cv::pyrDown(input_image, input_image);
-    cv::pyrDown(input_image, input_image);
+    for(int i=0; i<downsample_times_param_; ++i)
+      cv::pyrDown(input_image, input_image);
 
     // Grab a new keyframe whenever we have lost more than half of our tracks
     if(key_corners_.size() < size_t(num_keypoints_param_ / 2))
@@ -277,7 +284,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
     // Draw the warped keyframe
     if(key_corners_.size())
-      cv::imshow("homography", warped_key_image);
+      cv::imshow("keyframe", warped_key_image);
 
     // Draw the features on the input image
     if(key_corners_.size())

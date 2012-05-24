@@ -1,5 +1,7 @@
 <launch>
   <arg name="prefix_none"     value=""/>
+  <arg name="prefix_xterm"    value="xterm -hold -e"/>
+  <arg name="prefix_gdb"      value="xterm -e gdb -ex run --args"/>
   <arg name="prefix_callgrind" value="xterm -hold -e valgrind --tool=callgrind"/>
 
   <!--############################## CAMERA ##############################-->
@@ -34,7 +36,8 @@
   </node>
 
   <!--############################## OPTICAL FLOW ##############################-->
-  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_none)">
+  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_xterm)">
+    <param name="downsample_times"  value="1"    type="int"/>
     <param name="matchscore_thresh" value="10e6" type="double"/>
     <param name="num_keypoints"     value="50"   type="int"/>
     <param name="backwards_filter"  value="true" type="bool"/>
