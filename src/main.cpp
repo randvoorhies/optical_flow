@@ -1,6 +1,8 @@
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/Range.h>
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
@@ -18,11 +20,15 @@ class OpticalFlow
 
   protected:
     void imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr);
+    void imuCallback(const sensor_msgs::Imu::ConstPtr &msg);
+    void sonarCallback(const sensor_msgs::Range::ConstPtr &msg);
 
   private:
     ros::NodeHandle nh_;
     image_transport::ImageTransport it_;
     image_transport::Subscriber image_sub_;
+    ros::Subscriber imu_sub_;
+    ros::Subscriber sonar_sub_;
     cv::Mat key_image_;
     std::vector<cv::Point2f> key_corners_;
 
@@ -36,7 +42,10 @@ OpticalFlow::OpticalFlow() :
 {
   // Subscriptions/Advertisements
   image_sub_ = it_.subscribe("image", 1, &OpticalFlow::imageCallback, this);
+  imu_sub_   = nh_.subscribe("imu",   1, &OpticalFlow::imuCallback,    this);
+  sonar_sub_ = nh_.subscribe("sonar", 1, &OpticalFlow::sonarCallback, this);
 
+  // Parameters
   nh_.param("num_keypoints", num_keypoints_param_, 50);
   nh_.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
 }
@@ -45,6 +54,18 @@ OpticalFlow::OpticalFlow() :
 OpticalFlow::~OpticalFlow() 
 { 
 }
+
+// ######################################################################
+void OpticalFlow::imuCallback(const sensor_msgs::Imu::ConstPtr &msg)
+{
+}
+
+// ######################################################################
+void OpticalFlow::sonarCallback(const sensor_msgs::Range::ConstPtr &msg)
+{
+  double range = msg->range;
+}
+
 
 // ######################################################################
 //! Draw the features onto the image, and draw lines between matches
