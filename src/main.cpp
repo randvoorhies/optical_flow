@@ -46,13 +46,18 @@ class OpticalFlow
 
     Quaternion imu_quat_;
 
+    // Parameters
     int num_keypoints_param_;
     double matchscore_thresh_param_;
+    bool backwards_filter_param_;
+
+    double avg_time_;
 };
 
 // ######################################################################
 OpticalFlow::OpticalFlow() :
-  it_(nh_)
+  it_(nh_),
+  avg_time_(-1.0)
 {
   // Subscriptions/Advertisements
   image_sub_    = it_.subscribe("image", 1, &OpticalFlow::imageCallback, this);
@@ -61,8 +66,9 @@ OpticalFlow::OpticalFlow() :
   cam_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("cam_pose", 10);
   
   // Parameters
-  nh_.param("num_keypoints", num_keypoints_param_, 50);
+  nh_.param("num_keypoints",     num_keypoints_param_, 50);
   nh_.param("matchscore_thresh", matchscore_thresh_param_, 10e8);
+  nh_.param("backwards_filter",  backwards_filter_param_, true);
 
   global_transform_ = cv::Mat_<double>::eye(3,3);
 }
@@ -85,7 +91,7 @@ void OpticalFlow::imuCallback(const sensor_msgs::Imu::ConstPtr &msg)
 // ######################################################################
 void OpticalFlow::sonarCallback(const sensor_msgs::Range::ConstPtr &msg)
 {
-  double range = msg->range;
+  //double range = msg->range;
 }
 
 
@@ -141,13 +147,15 @@ void filterPoints(std::vector<cv::Point2f> & p1, std::vector<cv::Point2f> & p2,
     @param curr_image The new incoming image
     @param corners The old corners, found (e.g. by cv::goodFeaturesToTrack) in the key_image
     @param new_corners A vector which will be filled with the locations of the corners in curr_image
+    @param backwards_filter Should we perform the backwards filtering step? (see note below)
     
     \note This method tries very hard to filter out bad tracks by performing both a forwards, and a backwards LK tracking step.
           All untrackable points will be removed from the corners vector, so that corners and new_corners will have the same size
           after trackFeatures() is finished. */
-void trackFeatures(cv::Mat key_image, cv::Mat curr_image, std::vector<cv::Point2f> & corners, std::vector<cv::Point2f> & new_corners)
+void trackFeatures(cv::Mat key_image, cv::Mat curr_image,
+    std::vector<cv::Point2f> & corners, std::vector<cv::Point2f> & new_corners, bool backwards_filter = true)
 {
-  cv::Size const searchWindow(15, 15);
+  cv::Size const searchWindow(10, 10);
 
   new_corners.resize(corners.size());
 
@@ -162,6 +170,8 @@ void trackFeatures(cv::Mat key_image, cv::Mat curr_image, std::vector<cv::Point2
   filterPoints(corners, new_corners, status);
 
   if(corners.size() == 0) return;
+
+  if(backwards_filter == false) return;
 
   // Perform the backwards LK step
   std::vector<cv::Point2f> back_corners;
@@ -205,19 +215,22 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
     cv::Mat input_image = cv_ptr->image;
 
-    // Scale the incoming image down by 50%
+    ros::Time start_time = ros::Time::now();
+
+    // Scale the incoming image down
+    cv::pyrDown(input_image, input_image);
     cv::pyrDown(input_image, input_image);
 
     // Grab a new keyframe whenever we have lost more than half of our tracks
     if(key_corners_.size() < size_t(num_keypoints_param_ / 2))
     {
-      cv::goodFeaturesToTrack(input_image, key_corners_, num_keypoints_param_, 0.01, 30);
+      cv::goodFeaturesToTrack(input_image, key_corners_, num_keypoints_param_, 0.01, 10);
       key_image_ = input_image.clone();
     }
 
     // Track the features from the keyframe to the current frame
     std::vector<cv::Point2f> new_corners;
-    trackFeatures(key_image_, input_image, key_corners_, new_corners);
+    trackFeatures(key_image_, input_image, key_corners_, new_corners, backwards_filter_param_);
 
     cv::Mat warped_key_image;
     if(new_corners.size() < size_t(num_keypoints_param_/2))
@@ -232,33 +245,34 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
       // Warp the keyframe image to the new image, and find the squared difference
       cv::warpPerspective(key_image_, warped_key_image, homography, key_image_.size());
-      cv::Mat matchScore;
-      cv::matchTemplate(input_image, warped_key_image, matchScore, CV_TM_SQDIFF);
+      double matchScore = cv::norm(input_image, warped_key_image, cv::NORM_L2);
 
       // If the difference between the warped template and the new frame is too large,
       // then kill the keyframe
-      if(matchScore.at<float>(0,0) > matchscore_thresh_param_)
+      if(matchScore > matchscore_thresh_param_)
         key_corners_.clear();
 
-      if(key_corners_.size())
-      {
-        std::cout << __LINE__ << std::endl;
-        global_transform_ = homography * global_transform_;
+      //if(key_corners_.size())
+      //{
+      //  //global_transform_ = homography * global_transform_;
 
 
-        // Find the current position of the camera
-        std::cout << __LINE__ << std::endl;
-        cv::Mat position = global_transform_ * (cv::Mat_<double>(3, 1) << 0, 0, 1);
-        //position.at<double>(0,0) -= input_image.cols/2;
-        //position.at<double>(0,1) -= input_image.rows/2;
+      //  // Find the current position of the camera
+      //  //cv::Mat position = global_transform_ * (cv::Mat_<double>(3, 1) << 0, 0, 1);
+      //  //position.at<double>(0,0) -= input_image.cols/2;
+      //  //position.at<double>(0,1) -= input_image.rows/2;
 
-        std::cout << __LINE__ << std::endl;
-        ROS_INFO("Position: %0.4f %0.4f", position.at<double>(0,0), position.at<double>(0, 1));
-      }
+      //  //ROS_INFO("Position: %0.4f %0.4f", position.at<double>(0,0), position.at<double>(0, 1));
+      //}
       
 
     }
 
+    ros::Time end_time = ros::Time::now();
+    double duration_ms = (end_time - start_time).toSec() * 1000.0;
+    if(avg_time_ == -1.0) avg_time_ = duration_ms;
+    else avg_time_ = 0.2 * duration_ms + 0.8 * avg_time_;
+    ROS_INFO("Processing took: %0.4fms",  avg_time_); 
 
 
     // Draw the warped keyframe
