@@ -4,10 +4,10 @@
   <arg name="prefix_gdb"      value="xterm -e gdb -ex run --args"/>
   <arg name="prefix_callgrind" value="xterm -hold -e valgrind --tool=callgrind"/>
 
-  <!--############################## CAMERA ##############################
+  <!--############################## CAMERA ##############################-->
   <node name="camera1394" pkg="camera1394" type="camera1394_node" respawn="false" output="screen">
 	  <param name="use_ros_time" value="true" type="bool" />
-  </node>-->
+  </node>
 
   <!--#################### IMU ####################
   <node pkg="microstrain_3dmgx1_imu" type="imu_node" name="imu" output="screen">
@@ -37,8 +37,8 @@
   </node>
 
   <!--############################## OPTICAL FLOW ##############################-->
-  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_xterm)">
-    <param name="downsample_times"    value="2"    type="int"/>
+  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_gdb)">
+    <param name="downsample_times"    value="1"    type="int"/>
     <param name="matchscore_thresh"   value="10e11" type="double"/>
     <param name="num_keypoints"       value="25"   type="int"/>
     <param name="backwards_filter"    value="true" type="bool"/>
