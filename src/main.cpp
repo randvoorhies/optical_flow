@@ -17,7 +17,7 @@
 #include <Eigen/Core>
 #include <tf/transform_broadcaster.h>
 
-#include "optical_flow/KeyframeTracker.h"
+//#include "optical_flow/KeyframeTracker.h"
 
 // ######################################################################
 class OpticalFlow
@@ -49,7 +49,7 @@ class OpticalFlow
 
     Eigen::Quaternionf imu_quat_;
 
-    KeyframeTracker tracker_;
+    //KeyframeTracker tracker_;
 
     // Parameters
     int num_keypoints_param_;
@@ -139,16 +139,19 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     double const focal_length_x = 49.3804;
     double const focal_length_y = 49.3804;
 
+    // Transformation to flip the axis into the camera coordinate system
     Eigen::Matrix3f ENUfromNED;
     ENUfromNED << 0,  1,  0,
                   1,  0,  0,
                   0,  0, -1;
 
+    // The IMU to Camera transformation
     Eigen::Quaternionf imu2camera = 
       Eigen::AngleAxisf(M_PI/180.0*cam2imu_yaw_param_,   Eigen::Vector3f::UnitZ()) * 
       Eigen::AngleAxisf(M_PI/180.0*cam2imu_pitch_param_, Eigen::Vector3f::UnitY()) * 
       Eigen::AngleAxisf(M_PI/180.0*cam2imu_roll_param_,  Eigen::Vector3f::UnitX());
 
+    // The camera orientation in world coordinates
     Eigen::Quaternionf camera_rotation(ENUfromNED * imu_quat_ * imu2camera.inverse());
 
     tf::Transform camera_transform;
@@ -160,18 +163,13 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     tf_pub_.sendTransform(tf::StampedTransform(camera_transform, ros::Time::now(), "world", "camera"));
 
 
-    Eigen::Matrix3f uv2xy;
-    uv2xy << 0, 1, 0,
-             1, 0, 0,
-             0, 0, 1;
-
     Eigen::Matrix3f K;
     K << focal_length_x, 0,              input_image.cols/2,
          0,              focal_length_y, input_image.rows/2,
          0,              0,              1;
 
     // http://en.wikipedia.org/wiki/Homography#3D_plane_to_plane_equation
-    Eigen::Matrix3f warp_matrix_eigen = uv2xy * K * camera_rotation * K.inverse() * uv2xy;
+    Eigen::Matrix3f warp_matrix_eigen = K * camera_rotation.inverse() * K.inverse();
 
 
 
