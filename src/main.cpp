@@ -44,9 +44,6 @@ class OpticalFlow
     tf::TransformBroadcaster tf_pub_;
 
     cv::Mat key_image_;
-    std::vector<cv::Point2f> key_corners_;
-
-    cv::Mat global_transform_;
 
     Eigen::Quaternionf imu_quat_;
 
@@ -75,7 +72,6 @@ OpticalFlow::OpticalFlow() :
   imu_sub_      = nh_.subscribe("imu",   1, &OpticalFlow::imuCallback,    this);
   sonar_sub_    = nh_.subscribe("sonar", 1, &OpticalFlow::sonarCallback, this);
   cam_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("cam_pose", 10);
-
   
   // Parameters
   ros::NodeHandle private_nh("~");
@@ -85,14 +81,12 @@ OpticalFlow::OpticalFlow() :
   private_nh.param("downsample_times",    downsample_times_param_, 2);
   private_nh.param("backwards_threshold", backwards_threshold_param_, 10.0);
 
+  // The camera to IMU transform, applied as yaw*pitch*roll.
+  // These parameters are all in degrees.
   private_nh.param("cam2imu_roll",   cam2imu_roll_param_,  0.0);
   private_nh.param("cam2imu_pitch",  cam2imu_pitch_param_, 0.0);
   private_nh.param("cam2imu_yaw",    cam2imu_yaw_param_,   0.0);
 
-  ROS_WARN("Downsample Times>>>> %d", downsample_times_param_);
-  ROS_WARN("numkeypoints %d", num_keypoints_param_);
-
-  global_transform_ = cv::Mat_<double>::eye(3,3);
 }
 
 // ######################################################################
@@ -136,7 +130,6 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
     cv::Mat input_image = cv_ptr->image;
 
-
     double const focal_length_x = 49.3804*10;
     double const focal_length_y = 49.3804*10;
 
@@ -155,15 +148,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     // The camera orientation in world coordinates
     Eigen::Quaternionf camera_rotation(ENUfromNED * imu_quat_ * imu2camera.inverse());
 
-    tf::Transform camera_transform;
-    camera_transform.setOrigin(tf::Vector3(0, 0, 0));
-    camera_transform.setRotation(
-        tf::Quaternion(
-          camera_rotation.x(), camera_rotation.y(),
-          camera_rotation.z(), camera_rotation.w()));
-    tf_pub_.sendTransform(tf::StampedTransform(camera_transform, ros::Time::now(), "world", "camera"));
-
-
+    // The camera intrinsic parameters
     Eigen::Matrix3f K;
     K << focal_length_x, 0,              input_image.cols/2,
          0,              focal_length_y, input_image.rows/2,
@@ -172,17 +157,24 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     // http://en.wikipedia.org/wiki/Homography#3D_plane_to_plane_equation
     Eigen::Matrix3f warp_matrix_eigen = K * camera_rotation * K.inverse();
 
-
-
+    // Warp the image
     cv::Mat warp_matrix = eigen2cv<float>(warp_matrix_eigen);
     cv::Mat warped_image;
     cv::warpPerspective(input_image, warped_image, warp_matrix, input_image.size());
 
-    //cv::imshow("input_image", input_image);
+    // Send a tf frame to show where the camera is pointing
+    tf::Transform camera_transform;
+    camera_transform.setOrigin(tf::Vector3(0, 0, 0));
+    camera_transform.setRotation(
+        tf::Quaternion(
+          camera_rotation.x(), camera_rotation.y(),
+          camera_rotation.z(), camera_rotation.w()));
+    tf_pub_.sendTransform(tf::StampedTransform(camera_transform, ros::Time::now(), "world", "camera"));
+
+    // Display the image
     cv::imshow("display", rcv::hcat(input_image, warped_image));
 
     cv::waitKey(2);
-
   }
   catch(cv_bridge::Exception & e)
   {
