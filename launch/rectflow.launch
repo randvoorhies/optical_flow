@@ -9,7 +9,7 @@
 	  <param name="use_ros_time" value="true" type="bool" />
   </node>
 
-  <!--#################### IMU ####################
+  <!--#################### IMU ####################-->
   <node pkg="microstrain_3dmgx1_imu" type="imu_node" name="imu" output="screen">
     <param name="port"                   value="/dev/ttyUSB3" type="string"/>
     <param name="autostart"              value="true"         type="bool"/>
@@ -18,7 +18,7 @@
     <param name="angular_velocity_stdev" value="0.00017"      type="double"/>
 
     <remap from="data" to="/imu/data"/>
-  </node>-->
+  </node>
 
   <!--############################## RECTIFIER ##############################-->
   <node pkg="jplvision" name="image_rectifier" type="image_rectifier_node" output="screen">
@@ -37,14 +37,18 @@
   </node>
 
   <!--############################## OPTICAL FLOW ##############################-->
-  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_gdb)">
+  <node pkg="optical_flow" type="optical_flow" name="optical_flow" respawn="false" output="screen" launch-prefix="$(arg prefix_none)">
     <param name="downsample_times"    value="1"    type="int"/>
     <param name="matchscore_thresh"   value="10e11" type="double"/>
     <param name="num_keypoints"       value="25"   type="int"/>
     <param name="backwards_filter"    value="true" type="bool"/>
     <param name="backwards_threshold" value="10"   type="double"/>
+    <param name="roll"  value="90.0"/>
+    <param name="pitch" value="90.0"/>
+    <param name="yaw"   value="00.0"/>
 
     <remap from="image" to="/camera/image_rect"/>
+    <remap from="imu" to="imu/data"/>
   </node>
 
 </launch>
