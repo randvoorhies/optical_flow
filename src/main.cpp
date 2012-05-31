@@ -57,9 +57,9 @@ class OpticalFlow
     bool backwards_filter_param_;
     int downsample_times_param_;
     double backwards_threshold_param_;
-    double roll_param_;
-    double pitch_param_;
-    double yaw_param_;
+    double cam2imu_roll_param_;
+    double cam2imu_pitch_param_;
+    double cam2imu_yaw_param_;
 
     double avg_time_;
 };
@@ -84,9 +84,9 @@ OpticalFlow::OpticalFlow() :
   private_nh.param("downsample_times",    downsample_times_param_, 2);
   private_nh.param("backwards_threshold", backwards_threshold_param_, 10.0);
 
-  private_nh.param("roll",   roll_param_,  0.0);
-  private_nh.param("pitch",  pitch_param_, 0.0);
-  private_nh.param("yaw",    yaw_param_,   0.0);
+  private_nh.param("cam2imu_roll",   cam2imu_roll_param_,  0.0);
+  private_nh.param("cam2imu_pitch",  cam2imu_pitch_param_, 0.0);
+  private_nh.param("cam2imu_yaw",    cam2imu_yaw_param_,   0.0);
 
   ROS_WARN("Downsample Times>>>> %d", downsample_times_param_);
   ROS_WARN("numkeypoints %d", num_keypoints_param_);
@@ -139,12 +139,18 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     double const focal_length_x = 49.3804;
     double const focal_length_y = 49.3804;
 
-    Eigen::Quaternionf imu2camera = 
-      Eigen::AngleAxisf(M_PI/180.0*yaw_param_,   Eigen::Vector3f::UnitZ()) * 
-      Eigen::AngleAxisf(M_PI/180.0*pitch_param_, Eigen::Vector3f::UnitY()) * 
-      Eigen::AngleAxisf(M_PI/180.0*roll_param_,  Eigen::Vector3f::UnitX());
+    Eigen::Matrix3f ENUfromNED;
+    ENUfromNED << 0,  1,  0,
+                  1,  0,  0,
+                  0,  0, -1;
 
-    Eigen::Quaternionf camera_rotation = imu_quat_ * imu2camera.inverse();
+    Eigen::Quaternionf imu2camera = 
+      Eigen::AngleAxisf(M_PI/180.0*cam2imu_yaw_param_,   Eigen::Vector3f::UnitZ()) * 
+      Eigen::AngleAxisf(M_PI/180.0*cam2imu_pitch_param_, Eigen::Vector3f::UnitY()) * 
+      Eigen::AngleAxisf(M_PI/180.0*cam2imu_roll_param_,  Eigen::Vector3f::UnitX());
+
+    Eigen::Quaternionf camera_rotation(ENUfromNED * imu_quat_ * imu2camera.inverse());
+
     tf::Transform camera_transform;
     camera_transform.setOrigin(tf::Vector3(0, 0, 0));
     camera_transform.setRotation(
