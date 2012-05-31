@@ -16,6 +16,7 @@
 #include <Eigen/Geometry>
 #include <Eigen/Core>
 #include <tf/transform_broadcaster.h>
+#include <rcv.hpp>
 
 //#include "optical_flow/KeyframeTracker.h"
 
@@ -136,8 +137,8 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     cv::Mat input_image = cv_ptr->image;
 
 
-    double const focal_length_x = 49.3804;
-    double const focal_length_y = 49.3804;
+    double const focal_length_x = 49.3804*10;
+    double const focal_length_y = 49.3804*10;
 
     // Transformation to flip the axis into the camera coordinate system
     Eigen::Matrix3f ENUfromNED;
@@ -169,7 +170,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
          0,              0,              1;
 
     // http://en.wikipedia.org/wiki/Homography#3D_plane_to_plane_equation
-    Eigen::Matrix3f warp_matrix_eigen = K * camera_rotation.inverse() * K.inverse();
+    Eigen::Matrix3f warp_matrix_eigen = K * camera_rotation * K.inverse();
 
 
 
@@ -178,7 +179,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     cv::warpPerspective(input_image, warped_image, warp_matrix, input_image.size());
 
     //cv::imshow("input_image", input_image);
-    cv::imshow("warped_image", warped_image);
+    cv::imshow("display", rcv::hcat(input_image, warped_image));
 
     cv::waitKey(2);
 
