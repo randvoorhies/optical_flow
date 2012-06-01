@@ -109,6 +109,7 @@ void OpticalFlow::sonarCallback(const sensor_msgs::Range::ConstPtr &msg)
   //double range = msg->range;
 }
 
+// ######################################################################
 template <class Precision>
 cv::Mat eigen2cv(Eigen::Matrix<Precision, Eigen::Dynamic, Eigen::Dynamic> const & eigen_matrix)
 {
@@ -118,6 +119,19 @@ cv::Mat eigen2cv(Eigen::Matrix<Precision, Eigen::Dynamic, Eigen::Dynamic> const 
       cv_matrix(r, c) = eigen_matrix(r, c);
 
   return cv_matrix;
+}
+
+// ######################################################################
+tf::Transform eigen2tf(Eigen::Quaternionf const & rotation)
+{
+  tf::Transform transform;
+  transform.setOrigin(tf::Vector3(0, 0, 0));
+  transform.setRotation(
+      tf::Quaternion(
+        rotation.x(), rotation.y(),
+        rotation.z(), rotation.w()));
+
+  return transform;
 }
 
 // ######################################################################
@@ -163,13 +177,11 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
     cv::warpPerspective(input_image, warped_image, warp_matrix, input_image.size());
 
     // Send a tf frame to show where the camera is pointing
-    tf::Transform camera_transform;
-    camera_transform.setOrigin(tf::Vector3(0, 0, 0));
-    camera_transform.setRotation(
-        tf::Quaternion(
-          camera_rotation.x(), camera_rotation.y(),
-          camera_rotation.z(), camera_rotation.w()));
-    tf_pub_.sendTransform(tf::StampedTransform(camera_transform, ros::Time::now(), "world", "camera"));
+    tf_pub_.sendTransform(tf::StampedTransform(eigen2tf(camera_rotation), ros::Time::now(), "world", "camera"));
+
+    Eigen::Quaternionf warp_to(ENUfromNED * Eigen::Quaternionf::Identity());
+    tf_pub_.sendTransform(tf::StampedTransform(eigen2tf(warp_to), ros::Time::now(), "world", "warp_to"));
+
 
     // Display the image
     cv::imshow("display", rcv::hcat(input_image, warped_image));
