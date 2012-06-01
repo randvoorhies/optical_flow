@@ -32,7 +32,7 @@ class OpticalFlow
     void imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr);
     void imuCallback(const sensor_msgs::Imu::ConstPtr &msg);
     void sonarCallback(const sensor_msgs::Range::ConstPtr &msg);
-    Eigen::Matrix3f warpTo(Eigen::Quaternionf const & imu_rotation, Eigen::Quaternionf const & target_rotation, Eigen::Matrix3f const & K);
+    Eigen::Matrix3f downRotationWarp(Eigen::Quaternionf const & imu_rotation, Eigen::Matrix3f const & K);
 
   private:
     ros::NodeHandle nh_;
@@ -136,17 +136,13 @@ tf::Transform eigen2tf(Eigen::Quaternionf const & rotation)
 }
 
 // ######################################################################
-Eigen::Matrix3f OpticalFlow::warpTo(
-    Eigen::Quaternionf const & imu_rotation, Eigen::Quaternionf const & target_rotation, Eigen::Matrix3f const & K)
+Eigen::Matrix3f OpticalFlow::downRotationWarp(Eigen::Quaternionf const & imu_rotation, Eigen::Matrix3f const & K)
 {
   // Transformation to flip the axis into the camera coordinate system
   Eigen::Matrix3f ENUfromNED;
   ENUfromNED << 0,  1,  0,
                 1,  0,  0,
                 0,  0, -1;
-
-  // The target rotation in world coordinates
-  Eigen::Quaternionf target_rotation_world(ENUfromNED * target_rotation);
 
   // The IMU to Camera transformation
   Eigen::Quaternionf imu2camera = 
@@ -157,15 +153,12 @@ Eigen::Matrix3f OpticalFlow::warpTo(
   // The camera orientation in world coordinates
   Eigen::Quaternionf camera_rotation_world(ENUfromNED * imu_rotation * imu2camera.inverse());
 
-  //Eigen::Quaternionf current_to_target = target_rotation_world * current_to_target.inverse();
-  Eigen::Quaternionf current_to_target = target_rotation_world * camera_rotation_world.inverse();
 
   // http://en.wikipedia.org/wiki/Homography#3D_plane_to_plane_equation
-  Eigen::Matrix3f warp_matrix = K * current_to_target * K.inverse();
+  Eigen::Matrix3f warp_matrix = K * camera_rotation_world * K.inverse();
 
 
   tf_pub_.sendTransform(tf::StampedTransform(eigen2tf(camera_rotation_world), ros::Time::now(), "world", "camera"));
-  tf_pub_.sendTransform(tf::StampedTransform(eigen2tf(target_rotation_world), ros::Time::now(), "world", "target"));
 
   return warp_matrix;
 }
@@ -180,9 +173,6 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
 
     cv::Mat input_image = cv_ptr->image;
 
-    //Eigen::Quaternionf target_rotation = Eigen::Quaternionf::Identity();
-    Eigen::Quaternionf target_rotation(Eigen::AngleAxisf(M_PI/8., Eigen::Vector3f::UnitX()));
-
     // The camera intrinsic parameters
     double const focal_length_x = 49.3804*10;
     double const focal_length_y = 49.3804*10;
@@ -191,7 +181,7 @@ void OpticalFlow::imageCallback(sensor_msgs::ImageConstPtr const & input_img_ptr
       0,              focal_length_y, input_image.rows/2,
       0,              0,              1;
 
-    Eigen::Matrix3f warp_matrix_eigen = warpTo(imu_quat_, target_rotation, K);
+    Eigen::Matrix3f warp_matrix_eigen = downRotationWarp(imu_quat_, K);
 
     // Warp the image
     cv::Mat warp_matrix = eigen2cv<float>(warp_matrix_eigen);
